@@ -24,10 +24,10 @@ jobs:
 
           unzip -q -o "NexiosTV.zip" -d .
 
-          PROJECT_DIR="$(find . -type f -name gradlew | head -n 1 | xargs -r dirname)"
-          if [ -z "${PROJECT_DIR}" ]; then
+          PROJECT_DIR="$(find . -type f -name gradlew -print -quit | xargs -r dirname)"
+          if [ -z "${PROJECT_DIR}" ] || [ ! -f "${PROJECT_DIR}/gradlew" ]; then
             echo "Android project not found after extraction"
-            find . -maxdepth 4 \( -name gradlew -o -name settings.gradle -o -name settings.gradle.kts \) | head -n 50
+            find . -maxdepth 5 \( -name gradlew -o -name settings.gradle -o -name settings.gradle.kts \) | head -n 50
             exit 1
           fi
 
@@ -38,16 +38,29 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 17
+          java-version: "17"
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Accept Android licenses
+      - name: Install Android SDK packages
         shell: bash
         run: |
           set -euo pipefail
+
+          export ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
+          if [ -z "${ANDROID_SDK_ROOT:-}" ]; then
+            echo "ANDROID_SDK_ROOT is not set"
+            exit 1
+          fi
+
           yes | sdkmanager --licenses >/dev/null || true
+
+          COMPILE_SDK="$(grep -RhoE 'compileSdk[[:space:]]*(=?[[:space:]]*)?[0-9]+' "$PROJECT_DIR" 2>/dev/null | tail -n 1 | grep -oE '[0-9]+' || echo 34)"
+          BUILD_TOOLS="$(grep -RhoE 'buildToolsVersion[[:space:]]*=?[[:space:]]*\"[^\"]+\"' "$PROJECT_DIR" 2>/dev/null | tail -n 1 | sed -E 's/.*\"([^\"]+)\"/\\1/' || echo '34.0.0')"
+
+          echo "Detected compileSdk=${COMPILE_SDK} buildTools=${BUILD_TOOLS}"
+          yes | sdkmanager "platforms;android-${COMPILE_SDK}" "build-tools;${BUILD_TOOLS}" >/dev/null || true
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -59,6 +72,7 @@ jobs:
         run: |
           set -euo pipefail
           cd "$PROJECT_DIR"
+          printf 'sdk.dir=%s\n' "${ANDROID_SDK_ROOT:-$ANDROID_HOME}" > local.properties
           ./gradlew assembleDebug --no-daemon --stacktrace
 
       - name: Upload APK artifact
