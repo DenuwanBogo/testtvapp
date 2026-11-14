@@ -57,13 +57,19 @@ jobs:
             exit 1
           fi
 
+          echo "Using Android SDK root: ${ANDROID_SDK_ROOT}"
+
           yes | sdkmanager --licenses >/dev/null || true
 
           COMPILE_SDK="$(grep -RhoE 'compileSdk[[:space:]]*(=?[[:space:]]*)?[0-9]+' "$PROJECT_DIR" 2>/dev/null | tail -n 1 | grep -oE '[0-9]+' || echo 34)"
-          BUILD_TOOLS="$(grep -RhoE 'buildToolsVersion[[:space:]]*=?[[:space:]]*\"[^\"]+\"' "$PROJECT_DIR" 2>/dev/null | tail -n 1 | sed -E 's/.*\"([^\"]+)\"/\\1/' || echo '34.0.0')"
+          BUILD_TOOLS="$(grep -RhoE 'buildToolsVersion[[:space:]]*=?[[:space:]]*\"[^\"]+\"' "$PROJECT_DIR" 2>/dev/null | tail -n 1 | sed -E 's/.*\"([^\"]+)\"/\1/' || echo '34.0.0')"
 
           echo "Detected compileSdk=${COMPILE_SDK} buildTools=${BUILD_TOOLS}"
-          yes | sdkmanager "platforms;android-${COMPILE_SDK}" "build-tools;${BUILD_TOOLS}" >/dev/null || true
+
+          sdkmanager --install \
+            "platform-tools" \
+            "platforms;android-${COMPILE_SDK}" \
+            "build-tools;${BUILD_TOOLS}"
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
